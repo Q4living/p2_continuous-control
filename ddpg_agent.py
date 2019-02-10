@@ -3,7 +3,7 @@ import random
 import copy
 from collections import namedtuple, deque
 
-from model4 import Actor, Critic
+from model import Actor, Critic
 
 import torch
 import torch.nn.functional as F
@@ -12,17 +12,18 @@ import torch.optim as optim
 BUFFER_SIZE = int(1e5)  # replay buffer size
 BATCH_SIZE = 64         # minibatch size
 GAMMA = 0.99            # discount factor
-TAU = 1e-2              # for soft update of target parameters
+TAU = 1e-3              # for soft update of target parameters
 LR_ACTOR = 1e-3         # learning rate of the actor 
 LR_CRITIC = 1e-4        # learning rate of the critic
-WEIGHT_DECAY = 1e-3     # L2 weight decay
+WEIGHT_DECAY = 0.0     # L2 weight decay
 
-#to decay exploration as it learns
-EPS_START=1.0
-EPS_END=0.05
-EPS_DECAY=3e-5
+# Additional exploration factor that decay as the agent mature
+epsilon=1.0
+epsilon_min=0.01
+epsilon_decay=0.95
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 class Agent():
     """Interacts with and learns from the environment."""
@@ -52,7 +53,8 @@ class Agent():
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         # Noise process
-        self.noise = OUNoise(action_size, random_seed)
+        self.noise = OUNoise((num_agents, action_size), random_seed)
+        self.eps = epsilon
 
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
@@ -60,34 +62,28 @@ class Agent():
         # Make sure target is initialized with the same weight as the source (found on slack to make big difference)
         self.hard_update(self.actor_target, self.actor_local)
         self.hard_update(self.critic_target, self.critic_local)
-        
-#         self.timesteps = 0
     
     def step(self, state, action, reward, next_state, done, timesteps):
         """Save experience in replay memory, and use random sample from buffer to learn."""
         # Save experience / reward
-#         self.memory.add(state, action, reward, next_state, done)
+        # self.memory.add(state, action, reward, next_state, done)
+        # Changed to support multi-agents
         for i in range(self.num_agents):
-            self.memory.add(state[i, :], action[i, :], reward[i], next_state[i, :], done[i])
+            self.memory.add(state[i], action[i], reward[i], next_state[i], done[i])
 
-#         self.timesteps +=1
         # Learn, if enough samples are available in memory
-        if (len(self.memory) > BATCH_SIZE) and (timesteps % 20 == 0):
-            for _ in range(10):
+        # Tried the udacity code for every 20 steps with 10 training, which doesnt scale up
+        # It trained up fast if we sample the batch more frequently as below
+        if len(self.memory) > BATCH_SIZE:
+            for _ in range(4):
                 experiences = self.memory.sample()
                 self.learn(experiences, GAMMA)
-
-#             experiences = self.memory.sample()
-#             self.learn(experiences, GAMMA)
 
     def act(self, state, add_noise=True):
         """Returns actions for given state as per current policy."""
         states = torch.from_numpy(state).float().to(device)
         self.actor_local.eval()
         with torch.no_grad():
-#             for agent_num, state in enumerate(states):
-#                 action = self.actor_local(state).cpu().data.numpy()
-#                 actions[agent_num, :] = action
             actions = self.actor_local(states).cpu().data.numpy()
         self.actor_local.train()
 
@@ -95,9 +91,9 @@ class Agent():
         if add_noise and (np.random.random() < self.eps):
             actions += self.noise.sample()
             #update the exploration parameter
-            self.eps -= EPS_DECAY
-            if self.eps < EPS_END:
-                self.eps = EPS_END
+            self.eps = self.eps * epsilon_decay
+            self.eps = max(self.eps, epsilon_min)
+                
             self.noise.reset()
         return np.clip(actions, -1, 1)
 
@@ -130,7 +126,7 @@ class Agent():
         # Minimize the loss
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm(self.critic_local.parameters(), 1)
+        torch.nn.utils.clip_grad_norm(self.critic_local.parameters(), 1.0) #clip the gradient for the critic network (Udacity hint)
         self.critic_optimizer.step()
 
         # ---------------------------- update actor ---------------------------- #
@@ -164,7 +160,8 @@ class Agent():
     ## of the live networks seemed to make a huge difference
     def hard_update(self, target, source):
         for target_param, source_param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(source_param.data)        
+            target_param.data.copy_(source_param.data)
+        
             
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
@@ -175,6 +172,7 @@ class OUNoise:
         self.theta = theta
         self.sigma = sigma
         self.seed = random.seed(seed)
+        self.size = size
         self.reset()
 
     def reset(self):
@@ -184,7 +182,9 @@ class OUNoise:
     def sample(self):
         """Update internal state and return it as a noise sample."""
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.array([random.random() for i in range(len(x))])
+        # dx = self.theta * (self.mu - x) + self.sigma * np.array([random.random() for i in range(len(x))])
+        # Code for adding noise for each agent differently
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.standard_normal(self.size)
         self.state = x + dx
         return self.state
 
