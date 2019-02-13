@@ -12,18 +12,17 @@ The Algorithm used in this project is based on the vanila DDPG from the coding e
 For each Actor and Critic are coupled with local and target networks
 
 ### Hyperparameters
-1. Actor: fc1_units=400, activation=relu # Layer 1 neuron size and activation function
-1. Actor: fc2_units=300, activation=relu # Layer 2 neuron size and activation function
-1. Actor: fc3, activation=tanh # Layer 2 neuron size and activation function
-1. Critic: fc1_units=400, activation=relu # Layer 1 neuron size and activation function
-1. Critic: fc2_units=300, activation=relu # Layer 2 neuron size and activation function
+1. Actor: fc1_units=400, activation=relu # Actor Layer 1 neuron size and activation function
+1. Actor: fc2_units=300, activation=relu # Actor Layer 2 neuron size and activation function
+1. Critic: fc1_units=400, activation=relu # Critic Layer 1 neuron size and activation function
+1. Critic: fc2_units=300, activation=relu # Critic Layer 2 neuron size and activation function
 1. BUFFER_SIZE = int(1e5) # replay buffer size
 1. BATCH_SIZE = 64 # minibatch size
 1. GAMMA = 0.99 # discount factor
 1. TAU = 1e-3 # for soft update of target parameters
-1. LR_ACTOR = 1e-3 # learning rate
-1. LR_CRITIC = 1e-4 # learning rate
-1. WEIGHT_DECAY = 0.0 # L2 weight decay
+1. LR_ACTOR = 1e-3 # learning rate for Actor
+1. LR_CRITIC = 1e-4 # learning rate for Critic
+1. WEIGHT_DECAY = 0.0 # L2 weight decay, cant not 
 
 With above hyper parameter setting, the agent was able to achieve good performance and reach score 30 in 19 episodes.
 
